@@ -1,4 +1,4 @@
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { generateJSON } from '@/lib/ai/gemini'
 import { PROMPTS } from '@/lib/ai/prompts'
 import { NextRequest, NextResponse } from 'next/server'
@@ -12,15 +12,10 @@ interface LearningBlock {
   common_mistakes: string[]
 }
 
+const MVP_USER_ID = '00000000-0000-0000-0000-000000000000'
+
 export async function POST(req: NextRequest) {
   try {
-    // Auth check
-    const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     // Parse body
     const { title, content } = await req.json()
     if (!content || content.trim().length < 50) {
@@ -36,7 +31,7 @@ export async function POST(req: NextRequest) {
     const { data: document, error: docError } = await admin
       .from('documents')
       .insert({
-        user_id: user.id,
+        user_id: MVP_USER_ID,
         title: title || 'Tài liệu chưa đặt tên',
         content: content.trim(),
         language: 'vi',
