@@ -1,9 +1,7 @@
 import { generateJSON } from '@/lib/ai/gemini'
 import { PROMPTS } from '@/lib/ai/prompts'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-
-const MVP_USER_ID = '00000000-0000-0000-0000-000000000000'
 
 interface LearningBlock {
   title: string
@@ -22,6 +20,13 @@ interface ExplainBackGrade {
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.redirect(new URL('/login', req.url))
+    }
+
     const { document_id, user_explanation } = await req.json()
 
     if (!document_id || !user_explanation || user_explanation.trim().length < 20) {
@@ -37,6 +42,7 @@ export async function POST(req: NextRequest) {
       .from('documents')
       .select('id, content')
       .eq('id', document_id)
+      .eq('user_id', user.id)
       .single()
 
     if (docError || !document) {
@@ -73,14 +79,14 @@ export async function POST(req: NextRequest) {
     const wrong = Array.isArray(grade.wrong_logic) ? grade.wrong_logic : []
     const mistakes = [
       ...missing.map((point) => ({
-        user_id: MVP_USER_ID,
+        user_id: user.id,
         document_id,
         source: 'explainback',
         content: point,
         correct_answer: 'Bổ sung ý còn thiếu trong phần giải thích.',
       })),
       ...wrong.map((point) => ({
-        user_id: MVP_USER_ID,
+        user_id: user.id,
         document_id,
         source: 'explainback',
         content: point,

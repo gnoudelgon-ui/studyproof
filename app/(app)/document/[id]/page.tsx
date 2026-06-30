@@ -1,4 +1,5 @@
-import { createAdminClient } from '@/lib/supabase/server'
+import { AuthHeader } from '@/components/auth-header'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { PracticeTabs } from './practice-tabs'
@@ -25,17 +26,23 @@ export default async function DocumentPage({
 }: {
   params: { id: string }
 }) {
-  const supabase = await createAdminClient()
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
 
-  const { data: doc } = await supabase
+  if (!user) redirect('/login')
+
+  const admin = await createAdminClient()
+
+  const { data: doc } = await admin
     .from('documents')
     .select('id, title, content, created_at')
     .eq('id', params.id)
+    .eq('user_id', user.id)
     .single()
 
   if (!doc) redirect('/dashboard')
 
-  const { data: blocks } = await supabase
+  const { data: blocks } = await admin
     .from('learning_blocks')
     .select('*')
     .eq('document_id', params.id)
@@ -46,8 +53,10 @@ export default async function DocumentPage({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-4">
+      <AuthHeader email={user.email ?? 'Người dùng'} />
+
+      <main className="max-w-5xl mx-auto px-4 py-8">
+        <div className="mb-5 flex items-center gap-4">
           <Link href="/dashboard" className="text-gray-500 hover:text-gray-700 text-sm">
             ← Dashboard
           </Link>
@@ -58,9 +67,7 @@ export default async function DocumentPage({
             {learningBlocks.length} blocks
           </span>
         </div>
-      </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8">
         <PracticeTabs documentId={document.id} learningBlocks={learningBlocks} />
       </main>
     </div>

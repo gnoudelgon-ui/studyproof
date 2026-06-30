@@ -1,6 +1,6 @@
 import { generateJSON } from '@/lib/ai/gemini'
 import { PROMPTS } from '@/lib/ai/prompts'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
 interface LearningBlock {
@@ -20,6 +20,13 @@ interface QuizQuestion {
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.redirect(new URL('/login', req.url))
+    }
+
     const { document_id } = await req.json()
 
     if (!document_id) {
@@ -32,6 +39,7 @@ export async function POST(req: NextRequest) {
       .from('documents')
       .select('id, content')
       .eq('id', document_id)
+      .eq('user_id', user.id)
       .single()
 
     if (docError || !document) {

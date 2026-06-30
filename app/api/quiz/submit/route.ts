@@ -1,7 +1,5 @@
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-
-const MVP_USER_ID = '00000000-0000-0000-0000-000000000000'
 
 interface QuizQuestion {
   question: string
@@ -37,6 +35,13 @@ function isCorrectAnswer(userAnswer: unknown, correctAnswer: string) {
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.redirect(new URL('/login', req.url))
+    }
+
     const { quiz_id, answers } = await req.json()
 
     if (!quiz_id || !Array.isArray(answers)) {
@@ -53,6 +58,17 @@ export async function POST(req: NextRequest) {
 
     if (quizError || !quiz) {
       return NextResponse.json({ error: 'Không tìm thấy quiz' }, { status: 404 })
+    }
+
+    const { data: document, error: docError } = await admin
+      .from('documents')
+      .select('id')
+      .eq('id', quiz.document_id)
+      .eq('user_id', user.id)
+      .single()
+
+    if (docError || !document) {
+      return NextResponse.json({ error: 'Không tìm thấy tài liệu' }, { status: 404 })
     }
 
     const questions = (quiz.questions ?? []) as QuizQuestion[]
@@ -77,7 +93,7 @@ export async function POST(req: NextRequest) {
     const { error: attemptError } = await admin
       .from('quiz_attempts')
       .insert({
-        user_id: MVP_USER_ID,
+        user_id: user.id,
         document_id: quiz.document_id,
         answers,
         score,
@@ -91,7 +107,7 @@ export async function POST(req: NextRequest) {
     const wrongMistakes = results
       .filter((result) => !result.is_correct)
       .map((result) => ({
-        user_id: MVP_USER_ID,
+        user_id: user.id,
         document_id: quiz.document_id,
         source: 'quiz',
         content: result.question,

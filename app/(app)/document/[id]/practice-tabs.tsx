@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 const TYPE_LABELS: Record<string, { label: string; color: string }> = {
   concept: { label: 'Khái niệm', color: 'bg-blue-100 text-blue-700' },
@@ -67,6 +68,7 @@ export function PracticeTabs({
   documentId: string
   learningBlocks: Block[]
 }) {
+  const router = useRouter()
   const [tab, setTab] = useState<Tab>('learn')
   const [quiz, setQuiz] = useState<Quiz | null>(null)
   const [quizAnswers, setQuizAnswers] = useState<string[]>([])
@@ -97,6 +99,11 @@ export function PracticeTabs({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ document_id: documentId }),
       })
+      if (res.redirected) {
+        router.push('/login')
+        return
+      }
+
       const data = await res.json()
 
       if (!res.ok) {
@@ -125,6 +132,11 @@ export function PracticeTabs({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quiz_id: quiz.id, answers: quizAnswers }),
       })
+      if (res.redirected) {
+        router.push('/login')
+        return
+      }
+
       const data = await res.json()
 
       if (!res.ok) {
@@ -151,6 +163,11 @@ export function PracticeTabs({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ document_id: documentId, user_explanation: explanation }),
       })
+      if (res.redirected) {
+        router.push('/login')
+        return
+      }
+
       const data = await res.json()
 
       if (!res.ok) {
