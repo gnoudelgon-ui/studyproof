@@ -97,6 +97,34 @@ Trả lời ONLY JSON:
 }
 `.trim(),
 
+  generateMistakeReviewQuiz: (mistakes: string, count: number = 5) => `
+Bạn là gia sư tạo bài ôn lại từ các lỗi sai của người học. Tạo ${count} câu quiz ngắn bằng tiếng Việt, chỉ dựa trên danh sách mistakes sau.
+
+Yêu cầu:
+- Mỗi câu phải gắn đúng mistake_id từ danh sách.
+- Trộn multiple_choice và short_answer nếu phù hợp.
+- multiple_choice có đúng 4 lựa chọn trong options.
+- short_answer đặt options là [].
+- correct_answer phải dựa trên correct_answer của mistake.
+- explanation giải thích ngắn vì sao đáp án đúng.
+
+Danh sách mistakes:
+${mistakes}
+
+Trả lời ONLY JSON:
+{
+  "questions": [
+    {
+      "mistake_id": "uuid",
+      "question": "Câu hỏi ôn lại?",
+      "type": "multiple_choice",
+      "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
+      "correct_answer": "A",
+      "explanation": "Giải thích ngắn gọn"
+    }
+  ]
+}
+`.trim(),
   gradeExplainBack: (content: string, blocks: string, userExplanation: string) => `
 Bạn là gia sư chấm bài theo phương pháp ExplainBack. Dựa trên tài liệu và learning blocks, chấm phần giải thích lại của người học theo 4 chiều:
 1. Thiếu ý nào.

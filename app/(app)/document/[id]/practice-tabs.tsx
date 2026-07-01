@@ -11,7 +11,7 @@ const TYPE_LABELS: Record<string, { label: string; color: string }> = {
   example: { label: 'Ví dụ', color: 'bg-pink-100 text-pink-700' },
 }
 
-type Tab = 'learn' | 'quiz' | 'explainback'
+type Tab = 'learn' | 'quiz' | 'explainback' | 'review'
 
 interface Block {
   id: string
@@ -53,6 +53,38 @@ interface QuizResult {
   }>
 }
 
+
+interface Mistake {
+  id: string
+  source: string
+  content: string
+  correct_answer: string | null
+  times_wrong: number
+  last_seen: string
+}
+
+interface ReviewQuestion {
+  mistake_id: string
+  question: string
+  type: 'multiple_choice' | 'short_answer'
+  options: string[]
+  correct_answer: string
+  explanation: string
+}
+
+interface ReviewResult {
+  score: number
+  correct_count: number
+  total: number
+  results: Array<{
+    mistake_id: string
+    question: string
+    user_answer: string
+    correct_answer: string
+    is_correct: boolean
+    explanation: string
+  }>
+}
 interface ExplainBackResult {
   score: number
   missing_points: string[]
@@ -79,7 +111,12 @@ export function PracticeTabs({
   const [explainBackResult, setExplainBackResult] = useState<ExplainBackResult | null>(null)
   const [explainBackLoading, setExplainBackLoading] = useState(false)
   const [explainBackError, setExplainBackError] = useState<string | null>(null)
-
+  const [mistakes, setMistakes] = useState<Mistake[]>([])
+  const [reviewQuiz, setReviewQuiz] = useState<ReviewQuestion[]>([])
+  const [reviewAnswers, setReviewAnswers] = useState<string[]>([])
+  const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null)
+  const [reviewLoading, setReviewLoading] = useState(false)
+  const [reviewError, setReviewError] = useState<string | null>(null)
   const updateQuizAnswer = (index: number, answer: string) => {
     setQuizAnswers((current) => {
       const next = [...current]
@@ -183,6 +220,107 @@ export function PracticeTabs({
     }
   }
 
+  const updateReviewAnswer = (index: number, answer: string) => {
+    setReviewAnswers((current) => {
+      const next = [...current]
+      next[index] = answer
+      return next
+    })
+  }
+
+  const loadMistakes = async () => {
+    setReviewLoading(true)
+    setReviewError(null)
+
+    try {
+      const res = await fetch(`/api/mistakes?documentId=${encodeURIComponent(documentId)}`)
+      if (res.redirected) {
+        router.push('/login')
+        return
+      }
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setReviewError(data.error || 'Không tải được danh sách lỗi')
+        return
+      }
+
+      setMistakes(data.mistakes ?? [])
+    } catch {
+      setReviewError('Không thể kết nối server')
+    } finally {
+      setReviewLoading(false)
+    }
+  }
+
+  const generateReviewQuiz = async () => {
+    setReviewLoading(true)
+    setReviewError(null)
+    setReviewResult(null)
+
+    try {
+      const res = await fetch('/api/mistakes/review/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentId }),
+      })
+      if (res.redirected) {
+        router.push('/login')
+        return
+      }
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setReviewError(data.error || 'Không tạo được quiz ôn lại')
+        return
+      }
+
+      setReviewQuiz(data.questions ?? [])
+      setReviewAnswers(new Array((data.questions ?? []).length).fill(''))
+    } catch {
+      setReviewError('Không thể kết nối server')
+    } finally {
+      setReviewLoading(false)
+    }
+  }
+
+  const submitReviewQuiz = async () => {
+    setReviewLoading(true)
+    setReviewError(null)
+
+    try {
+      const res = await fetch('/api/mistakes/review/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentId, questions: reviewQuiz, answers: reviewAnswers }),
+      })
+      if (res.redirected) {
+        router.push('/login')
+        return
+      }
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setReviewError(data.error || 'Không nộp được quiz ôn lại')
+        return
+      }
+
+      setReviewResult(data)
+      const refreshed = await fetch(`/api/mistakes?documentId=${encodeURIComponent(documentId)}`)
+      if (refreshed.ok) {
+        const refreshedData = await refreshed.json()
+        setMistakes(refreshedData.mistakes ?? [])
+      }
+    } catch {
+      setReviewError('Không thể kết nối server')
+    } finally {
+      setReviewLoading(false)
+    }
+  }
+
   return (
     <>
       <div className="mb-6 flex gap-2 border-b border-gray-200">
@@ -190,11 +328,15 @@ export function PracticeTabs({
           { id: 'learn', label: 'Học' },
           { id: 'quiz', label: 'Quiz' },
           { id: 'explainback', label: 'Trả bài' },
+          { id: 'review', label: 'Ôn lại' },
         ].map((item) => (
           <button
             key={item.id}
             type="button"
-            onClick={() => setTab(item.id as Tab)}
+            onClick={() => {
+              setTab(item.id as Tab)
+              if (item.id === 'review' && mistakes.length === 0) void loadMistakes()
+            }}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               tab === item.id
                 ? 'border-blue-600 text-blue-700'
@@ -419,6 +561,140 @@ export function PracticeTabs({
           )}
         </div>
       )}
+
+      {tab === 'review' && (
+        <div className="space-y-5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-gray-900">Ôn lại</h2>
+            <button
+              type="button"
+              onClick={generateReviewQuiz}
+              disabled={reviewLoading || mistakes.length === 0}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            >
+              {reviewLoading ? 'Đang xử lý...' : 'Ôn lại lỗi này'}
+            </button>
+          </div>
+
+          {reviewError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+              {reviewError}
+            </div>
+          )}
+
+          {mistakes.length === 0 && !reviewLoading ? (
+            <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-8 text-center text-gray-500">
+              Chưa có lỗi nào, học tiếp nhé
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {mistakes.map((mistake) => (
+                <div key={mistake.id} className="bg-white border border-gray-100 rounded-xl shadow-sm p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 mb-1">{formatSource(mistake.source)}</p>
+                      <p className="text-sm font-medium text-gray-900">{mistake.content}</p>
+                    </div>
+                    <span
+                      className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${
+                        mistake.times_wrong > 2
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      Sai {mistake.times_wrong} lần
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    Đáp án đúng: {mistake.correct_answer || 'Chưa có đáp án mẫu'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {reviewQuiz.length > 0 && (
+            <div className="space-y-4">
+              {reviewQuiz.map((question, index) => (
+                <div key={`${question.mistake_id}-${index}`} className="bg-white border border-gray-100 rounded-xl shadow-sm p-5">
+                  <div className="flex items-start gap-3">
+                    <span className="shrink-0 w-7 h-7 rounded-full bg-blue-50 text-blue-700 text-sm font-semibold flex items-center justify-center">
+                      {index + 1}
+                    </span>
+                    <div className="flex-1 space-y-3">
+                      <p className="font-medium text-gray-900">{question.question}</p>
+
+                      {question.type === 'multiple_choice' ? (
+                        <div className="space-y-2">
+                          {(question.options ?? []).map((option) => (
+                            <label key={option} className="flex items-center gap-2 text-sm text-gray-700">
+                              <input
+                                type="radio"
+                                name={`review-question-${index}`}
+                                value={option}
+                                checked={reviewAnswers[index] === option}
+                                onChange={(event) => updateReviewAnswer(index, event.target.value)}
+                                className="h-4 w-4"
+                              />
+                              <span>{option}</span>
+                            </label>
+                          ))}
+                        </div>
+                      ) : (
+                        <textarea
+                          value={reviewAnswers[index] ?? ''}
+                          onChange={(event) => updateReviewAnswer(index, event.target.value)}
+                          rows={3}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Nhập câu trả lời ngắn..."
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={submitReviewQuiz}
+                disabled={reviewLoading || reviewAnswers.some((answer) => !answer?.trim())}
+                className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {reviewLoading ? 'Đang nộp...' : 'Nộp bài ôn lại'}
+              </button>
+            </div>
+          )}
+
+          {reviewResult && (
+            <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900">Kết quả ôn lại</h3>
+                <span className="text-xl font-bold text-blue-700">{reviewResult.score}/100</span>
+              </div>
+              <p className="text-sm text-gray-600">
+                Đúng {reviewResult.correct_count}/{reviewResult.total} câu
+              </p>
+              <div className="space-y-3">
+                {reviewResult.results.map((result) => (
+                  <div
+                    key={result.mistake_id}
+                    className={`rounded-lg border px-4 py-3 ${
+                      result.is_correct
+                        ? 'bg-green-50 border-green-100'
+                        : 'bg-red-50 border-red-100'
+                    }`}
+                  >
+                    <p className="text-sm font-medium text-gray-900 mb-1">{result.question}</p>
+                    <p className="text-xs text-gray-600">Đáp án của bạn: {result.user_answer || 'Chưa trả lời'}</p>
+                    <p className="text-xs text-gray-600">Đáp án đúng: {result.correct_answer}</p>
+                    <p className="text-sm text-gray-700 mt-2">{result.explanation}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </>
   )
 }
@@ -452,4 +728,9 @@ function FeedbackList({
       </ul>
     </div>
   )
+}
+function formatSource(source: string) {
+  if (source === 'quiz') return 'Quiz'
+  if (source === 'explainback') return 'ExplainBack'
+  return source
 }
