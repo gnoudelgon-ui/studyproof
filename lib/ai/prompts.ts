@@ -132,6 +132,14 @@ Bạn là gia sư chấm bài theo phương pháp ExplainBack. Dựa trên tài 
 3. Ví dụ còn thiếu hoặc chưa phù hợp.
 4. Độ rõ ràng.
 
+Quy tắc chấm điểm:
+- Bắt buộc trả về "score" là một số nguyên từ 0 đến 100, không được để null, không được bỏ trống.
+- Nếu bài giải thích đúng phần lớn và chỉ thiếu 1 ý nhỏ, score nên nằm khoảng 70-85.
+- Nếu bài đúng gần như đầy đủ, score nên nằm khoảng 85-100.
+- Nếu bài có nhiều ý đúng nhưng thiếu vài phần quan trọng, score nên nằm khoảng 50-70.
+- Nếu bài sai logic chính hoặc gần như không đúng nội dung, score nên nằm khoảng 0-40.
+- Không copy số điểm trong ví dụ JSON; phải tự chấm dựa trên bài của người học.
+
 Tài liệu:
 ${content}
 
@@ -143,7 +151,7 @@ ${userExplanation}
 
 Trả lời ONLY JSON:
 {
-  "score": 0,
+  "score": 78,
   "missing_points": ["Ý quan trọng bị thiếu"],
   "wrong_logic": ["Điểm sai hoặc suy luận chưa đúng"],
   "good_points": ["Điểm làm tốt"],

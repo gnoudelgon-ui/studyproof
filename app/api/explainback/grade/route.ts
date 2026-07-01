@@ -11,11 +11,30 @@ interface LearningBlock {
 }
 
 interface ExplainBackGrade {
-  score: number
+  score: number | string | null
   missing_points: string[]
   wrong_logic: string[]
   good_points: string[]
   follow_up_question: string
+}
+
+function clampScore(score: number) {
+  return Math.max(0, Math.min(100, Math.round(score)))
+}
+
+function normalizeExplainBackScore(grade: ExplainBackGrade) {
+  const parsed = Number(grade.score)
+
+  if (Number.isFinite(parsed)) {
+    return { score: clampScore(parsed), usedFallback: false }
+  }
+
+  const goodCount = Array.isArray(grade.good_points) ? grade.good_points.length : 0
+  const missingCount = Array.isArray(grade.missing_points) ? grade.missing_points.length : 0
+  const wrongCount = Array.isArray(grade.wrong_logic) ? grade.wrong_logic.length : 0
+  const fallback = 70 + Math.min(goodCount, 4) * 5 - missingCount * 10 - wrongCount * 20
+
+  return { score: clampScore(fallback), usedFallback: true }
 }
 
 export async function POST(req: NextRequest) {
@@ -75,8 +94,19 @@ export async function POST(req: NextRequest) {
       )
     )
 
+    const scoreResult = normalizeExplainBackScore(grade)
     const missing = Array.isArray(grade.missing_points) ? grade.missing_points : []
     const wrong = Array.isArray(grade.wrong_logic) ? grade.wrong_logic : []
+    const good = Array.isArray(grade.good_points) ? grade.good_points : []
+
+    console.info('ExplainBack Gemini grade:', {
+      rawScore: grade.score,
+      normalizedScore: scoreResult.score,
+      usedFallback: scoreResult.usedFallback,
+      goodCount: good.length,
+      missingCount: missing.length,
+      wrongCount: wrong.length,
+    })
     const mistakes = [
       ...missing.map((point) => ({
         user_id: user.id,
@@ -105,10 +135,10 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      score: Math.max(0, Math.min(100, Math.round(Number(grade.score) || 0))),
+      score: scoreResult.score,
       missing_points: missing,
       wrong_logic: wrong,
-      good_points: Array.isArray(grade.good_points) ? grade.good_points : [],
+      good_points: good,
       follow_up_question: grade.follow_up_question ?? '',
     })
   } catch (err) {
